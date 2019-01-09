@@ -1,0 +1,273 @@
+// Part 2 
+
+module fill
+	(
+		SW,
+		CLOCK_50,						//	On Board 50 MHz
+		// Your inputs and outputs here
+		KEY,							// On Board Keys
+		// The ports below are for the VGA output.  Do not change.
+		VGA_CLK,   						//	VGA Clock
+		VGA_HS,							//	VGA H_SYNC
+		VGA_VS,							//	VGA V_SYNC
+		VGA_BLANK_N,						//	VGA BLANK
+		VGA_SYNC_N,						//	VGA SYNC
+		VGA_R,   						//	VGA Red[9:0]
+		VGA_G,	 						//	VGA Green[9:0]
+		VGA_B   						//	VGA Blue[9:0]
+	);
+
+	input [9:0] SW;
+	input			CLOCK_50;				//	50 MHz
+	input	[3:0]	KEY;					
+	// Declare your inputs and outputs here
+	// Do not change the following outputs
+	output			VGA_CLK;   				//	VGA Clock
+	output			VGA_HS;					//	VGA H_SYNC
+	output			VGA_VS;					//	VGA V_SYNC
+	output			VGA_BLANK_N;			//	VGA BLANK
+	output			VGA_SYNC_N;				//	VGA SYNC
+	output	[7:0]	VGA_R;   				//	VGA Red[7:0] Changed from 10 to 8-bit DAC
+	output	[7:0]	VGA_G;	 				//	VGA Green[7:0]
+	output	[7:0]	VGA_B;   				//	VGA Blue[7:0]
+	
+	wire resetn;
+	assign resetn = KEY[0];
+	
+	// Create the colour, x, y and writeEn wires that are inputs to the controller.
+
+	wire [2:0] colour;
+	wire [7:0] x;
+	wire [6:0] y;
+	wire writeEn;
+	
+	//wires to connect the control signals
+	wire loadX, loadY, count, loadColour, clear, reset_r;
+
+	// Create an Instance of a VGA controller - there can be only one!
+	// Define the number of colours as well as the initial background
+	// image file (.MIF) for the controller.
+	vga_adapter VGA(
+			.resetn(resetn),
+			.clock(CLOCK_50),
+			.colour(colour),
+			.x(x),
+			.y(y),
+			.plot(writeEn),
+			/* Signals for the DAC to drive the monitor. */
+			.VGA_R(VGA_R),
+			.VGA_G(VGA_G),
+			.VGA_B(VGA_B),
+			.VGA_HS(VGA_HS),
+			.VGA_VS(VGA_VS),
+			.VGA_BLANK(VGA_BLANK_N),
+			.VGA_SYNC(VGA_SYNC_N),
+			.VGA_CLK(VGA_CLK));
+		defparam VGA.RESOLUTION = "160x120";
+		defparam VGA.MONOCHROME = "FALSE";
+		defparam VGA.BITS_PER_COLOUR_CHANNEL = 1;
+		defparam VGA.BACKGROUND_IMAGE = "black.mif";
+			
+	// Put your code here. Your code should produce signals x,y,colour and writeEn
+	// for the VGA controller, in addition to any other functionality your design may require.
+	control c0(.clk(CLOCK_50), .resetn(resetn), .go(~KEY[3]), .draw(~KEY[1]), .clear(~KEY[2]), .loadX(loadX),
+							.loadY(loadY), .count(count), .loadColour(loadColour), 
+							.loadOut(writeEn), .clearOut(clear), .reset_r(reset_r));
+	datapath d0(.clk(CLOCK_50), .resetn(resetn), .dataIn(SW[6:0]), .colourIn(SW[9:7]), .loadX(loadX),
+							.loadY(loadY), .count(count), .loadColour(loadColour), .loadout(writeEn), 
+							.clear(clear), .Xout(x), .Yout(y), .colourOut(colour), .reset_r(reset_r));
+endmodule
+
+module control(
+    input clk,
+    input resetn,
+    input go,
+	 input draw,
+	 input clear,
+
+    output reg loadX, loadY, count, loadColour, loadOut, clearOut, reset_r
+    );
+
+    reg [3:0] current_state, next_state; 
+	 
+	 reg [4:0] counter;
+	 
+	 reg [13:0] clearCount;
+    
+    localparam  LOAD_X        = 3'd0,
+                LOAD_X_WAIT   = 3'd1,
+                LOAD_Y_C      = 3'd2,
+                LOAD_Y_C_WAIT = 3'd3,
+                DRAW_WAIT     = 3'd4,
+					 DRAW          = 3'd5,
+					 CLEAR_STATE   = 3'd6,
+					 REGCLEAR      = 3'd7;
+    
+    // Next state logic aka our state table
+    always@(*)
+    begin: state_table 
+            case (current_state)
+                LOAD_X: next_state = clear ? CLEAR_STATE : (go ? LOAD_X_WAIT : LOAD_X); // Loop in current state until value is input
+                LOAD_X_WAIT: next_state = go ? LOAD_X_WAIT : LOAD_Y_C; // Loop in current state until go signal goes low
+                LOAD_Y_C: next_state = clear ? CLEAR_STATE : (go ? LOAD_Y_C_WAIT : LOAD_Y_C); // Loop in current state until value is input
+                LOAD_Y_C_WAIT: next_state = go ? LOAD_Y_C_WAIT : DRAW_WAIT; // Loop in current state until go signal goes low
+                DRAW_WAIT: next_state = clear ? CLEAR_STATE : (draw ? DRAW : DRAW_WAIT);
+					 DRAW: if(counter <= 5'b10000) next_state = DRAW; //Draw onto screen until all 16 pixels are drawn
+								else next_state = REGCLEAR;
+					 REGCLEAR: next_state = LOAD_X;
+					 CLEAR_STATE: if(clearCount < 14'b11110000000001) next_state = CLEAR_STATE;
+										else next_state = LOAD_X;			
+            default:     next_state = LOAD_X;
+        endcase
+    end // state_table
+   
+
+    // Output logic aka all of our datapath control signals
+    always @(*)
+    begin: enable_signals
+        // By default make all our signals 0 to avoid latches.
+        // This is a different style from using a default statement.
+        // It makes the code easier to read.  If you add other out
+        // signals be sure to assign a default value for them here.
+        loadX = 1'b0;
+        loadY = 1'b0;
+        count = 1'b0;
+        loadColour = 1'b0;
+        loadOut = 1'b0;
+		  clearOut = 1'b0;
+		  reset_r = 1'b0;
+
+        case (current_state)
+            LOAD_X: begin
+                loadX = 1'b1;
+                end
+            LOAD_Y_C: begin
+                loadY = 1'b1;
+					 loadColour = 1'b1;
+                end
+            DRAW: begin
+                count = 1'b1;
+  					 loadOut = 1'b1;
+					 end
+				//REGCLEAR: begin
+					//reset_r = 1'b1;
+					//end
+				CLEAR_STATE: begin	 
+					 clearOut = 1'b1;
+					 loadOut = 1'b1;
+				end
+            // default:    // don't need default since we already made sure all of our outputs were assigned a value at the start of the always block
+        endcase
+    end // enable_signals
+   
+    // current_state registers
+    always@(posedge clk)
+    begin: state_FFs
+        if(!resetn) begin
+            current_state <= LOAD_X;
+				counter = 5'b0;
+				clearCount = 14'b0;
+			end
+        else begin
+            current_state <= next_state;
+				if(current_state == DRAW)
+					if(counter < 5'b10000)
+						counter <= counter + 1'b1;
+					else
+						counter <= 5'b0;
+				if(current_state == CLEAR_STATE) //look through entire screen and clears
+					if(clearCount < 14'b11110000000001)
+						clearCount <= clearCount + 1'b1;
+					else
+						clearCount <= 14'b0;
+			
+			end	
+    end // state_FFS
+endmodule
+
+module datapath(
+    input clk,
+    input resetn,
+    input [6:0] dataIn,
+	 input [2:0] colourIn, 
+    input loadX, loadY, count, loadColour,
+    input loadout, clear, reset_r,
+    output reg [7:0] Xout,
+	 output reg [6:0] Yout,
+	 output reg [2:0] colourOut
+	 );
+    
+    // input registers
+    reg [7:0] x;
+	 reg [6:0] y;
+
+	 //counter for drawing square
+	 reg [3:0] counter;
+	 //counter for clearing screen
+	 reg [7:0] clearCountX;
+	 reg [6:0] clearCountY;
+    // output of counter
+    reg [7:0] countXout;
+	 reg [6:0] countYout;
+    
+    // Registers x, y with respective input logic
+    always@(posedge clk)
+        if(!resetn) begin //active low reset
+            x <= 8'b0; 
+            y <= 7'b0; 
+            colourOut <= 3'b0;  
+        end
+        else begin
+				if(loadX)
+					x <= {1'b0, dataIn};
+				if(loadY)
+					y <= dataIn;
+            if(loadColour)
+                colourOut <= colourIn;
+				if(clear)
+					 colourOut <= 3'b0;
+        end
+ 
+    // Output result register
+    always@(posedge clk) 
+    if(!resetn || reset_r) begin //active low
+        Xout <= 8'b0; 
+		  Yout <= 7'b0;
+    end
+    else 
+		if(loadout) begin
+			Xout <= countXout;
+			Yout <= countYout;
+		end
+	 
+	 //4 bit counter
+	 always@(posedge clk)
+	 if(!resetn || reset_r) begin
+			counter <= 4'b0;
+			clearCountX <= 8'b0;
+			clearCountY <= 8'b0;
+			countXout <= 8'b0;
+			countYout <= 7'b0;
+		end
+	 else begin 
+		if(count) begin //draws 4 x 4 box at location
+			counter <= counter + 1'b1;
+			countXout <= x + counter[1:0];
+			countYout <= y + counter[3:2];
+		end
+		else counter <= 4'b0;
+		if(clear) begin //counts through entire grid and clears screen
+			clearCountX <= clearCountX + 1'b1;
+			if(clearCountX == 8'd127) begin
+				clearCountY <= clearCountY + 1'b1;
+				clearCountX <= 8'b0;
+			end
+			countXout <= clearCountX;
+			countYout <= clearCountY;
+		end
+		else begin
+			clearCountX <= 8'b0;
+			clearCountY <= 7'b0;
+		end
+	 end
+endmodule
