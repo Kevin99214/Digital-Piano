@@ -1,0 +1,71 @@
+m255
+K4
+z2
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+Z0 dC:/Users/Isamu Goto/Desktop/ECE241/Final Project (square wave)/Audio_Demo/Audio_Demo
+vcontrol
+Z1 !s110 1542955193
+!i10b 1
+!s100 k:Z3W[2n4ZM<?GH56WbzR0
+IaJE_C2`;Xz5>6F193?`2L1
+Z2 VDg1SIo80bB@j0V0VzS_@n1
+R0
+Z3 w1542955105
+Z4 8FinalProject.v
+Z5 FFinalProject.v
+L0 342
+Z6 OV;L;10.5b;63
+r1
+!s85 0
+31
+Z7 !s108 1542955192.000000
+Z8 !s107 FinalProject.v|
+Z9 !s90 -reportprogress|300|FinalProject.v|
+!i113 1
+Z10 tCvgOpt 0
+vdatapath
+R1
+!i10b 1
+!s100 Vezib2cVWI[FF[ef_>mMZ1
+Ih;A4E^YWXc0bN6>aciKTL1
+R2
+R0
+R3
+R4
+R5
+L0 399
+R6
+r1
+!s85 0
+31
+R7
+R8
+R9
+!i113 1
+R10
+vFinalProject
+R1
+!i10b 1
+!s100 @KLlQUBbKYTZES7ZC7An11
+IG^oI1LmjAVGCDH1l1VCal2
+R2
+R0
+R3
+R4
+R5
+L0 2
+R6
+r1
+!s85 0
+31
+R7
+R8
+R9
+!i113 1
+R10
+n@final@project
